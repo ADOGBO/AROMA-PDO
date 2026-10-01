@@ -7,7 +7,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.append(str(ROOT))
 
 # IMPORTANT: IL FAUT SOIT IMPOTÉ AVANT TORCH,TORCH.DISTRIBUTED....
-from utilis import idr_torch # Simu2D 
+from utilis import idr_torch 
 
 from torch.utils.data import Dataset, DataLoader
 from torch.nn.utils.rnn import pad_sequence
@@ -47,17 +47,17 @@ import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel
 from torch.utils.data.distributed import DistributedSampler
 
-from utilis.utilis import State,save_checkpoint_encoDeco,load_checkpoint_encoDeco,loss_model,cycle,compute_gradient_norm # in Simu2D
+from utilis.utilis import State,save_checkpoint_encoDeco,load_checkpoint_encoDeco,loss_model,cycle,compute_gradient_norm 
 from config.paser import add_args,add_args_encoDeco
 from config.preprocess import Dataset_Burgers                        
-from encoder_decoder.enco_deco import Encoder,Decoder  #in Simu 2D
+from encoder_decoder.enco_deco import Encoder,Decoder 
 
 
 # Code principal
 if __name__ == "__main__":
 
     # initialize the parallel environment
-    #if False:
+   
     dist.init_process_group(backend='nccl',\
                             init_method='env://',\
                                 world_size=idr_torch.size,\
@@ -79,9 +79,7 @@ if __name__ == "__main__":
     cfg.d=32*cfg.num_enco_head
     cfg.num_heads_deco=cfg.num_enco_head
     cfg.out_dim=cfg.u_dim
-    #cfg.accumulation_steps = cfg.global_batch_size // cfg.mini_batch_size
-
-    # beta
+    
     beta=0.0001
 
     # Paramètres HPC optimisés
@@ -91,7 +89,7 @@ if __name__ == "__main__":
     try:
         if torch.cuda.is_available():
             device = torch.device("cuda")
-            #device=torch.device(f"cuda:{idr_torch.local_rank}")
+            
 
         elif torch.backends.mps.is_available():
             device = torch.device("mps")
@@ -190,7 +188,7 @@ if __name__ == "__main__":
     #--------------- Resume-------------------------------------------
     if last_path.exists() and last_path.is_file():
         state=load_checkpoint_encoDeco(state, last_path, device)  #on recommence depuis le  last modele sauvegarde
-        #state.best_valid_loss=np.inf                                # We initialize the best loss
+        state.best_valid_loss=np.inf                                # We initialize the best loss
        
         print("-------------------telechargemnt model enco-deco reussi, epoch={state.epoch}----------")
     # _____________LOAD losses-------------------------------
@@ -214,7 +212,7 @@ if __name__ == "__main__":
         grad_enco=[]
         grad_deco=[]
     #--------------------------------DDp---------------------------------------------------
-    #if False:
+    
     # duplicate the model
     state.model_enco = DistributedDataParallel(state.model_enco, device_ids=[idr_torch.local_rank])
     state.model_deco = DistributedDataParallel(state.model_deco, device_ids=[idr_torch.local_rank])
@@ -241,56 +239,29 @@ if __name__ == "__main__":
         print(f"---------{step}/{cfg.max_iterations}--------------")
         for step_train_loader,batch in enumerate(train_loader):
 
-            x=batch[0] #shape (Batch,T,N,1)
-            u=batch[1]  #shape (Batch,T,N,1)
+            x=batch[0] 
+            u=batch[1]  
             x=x.to(device)
             u=u.to(device)
             target=u
             
 
-            batch_size_tr,time_step,space_step,_=x.shape #u.shape
+            batch_size_tr,time_step,space_step,_=x.shape
             x=rearrange(x, "b T N d -> (b T) N d")
             u=rearrange(u, "b T N d -> (b T) N d")
-            #if rank==0:
-            #    print(f"-- arrived before encoder---step_train_loader={step_train_loader:<10d}")
+            
             sample,means,log_var_square,_=state.model_enco(x,u)
-            #if rank==0:
-            #    print(f"-- arrived before decoder---step_train_loader={step_train_loader:<10d}")
+            
             out=state.model_deco(sample,x)
             out=rearrange(out,"(b T) N d -> b T N d",b=batch_size_tr)
-            #if rank==0:
-            #    print(f"-- arrived before loss--step_train_loader={step_train_loader:<10d}")
+            
             loss=loss_model(means,log_var_square,target,out,beta)
             loss=loss/cfg.accumulation_steps
 
-            #Backward pass avec scaling
             
-            #print(f"-- arrived before bacward---step_train_loader={step_train_loader:<10d} --loss={loss.item()} ---rank: {rank}")
-            #t0=time.time()
             loss.backward()
-
-            """t1=time.time()
-            print(f"YES rank: {rank} time={t1-t0}" )
-            state.optim_enco.step()
-            state.optim_deco.step()
-
-            #Réinitialisation des gradients
-            state.optim_enco.zero_grad()
-            state.optim_deco.zero_grad()
-
-            if rank==0:
-                print(f"---step={step:<10d} ---step_train_loader={step_train_loader:<10d}  ----train ElBO={(loss.item()*cfg.accumulation_steps):.4f}--- LRE = {state.scheduler_enco.get_last_lr()[0]:.6f}-- LRD = {state.scheduler_deco.get_last_lr()[0]:.6f} ")
-            """
-
-            """norm_enco=compute_gradient_norm(state.model_enco)
-            norm_deco=compute_gradient_norm(state.model_deco)
-            if rank==0:
-                print(f"-- arrived after backward---step_train_loader={step_train_loader:<10d} --grad_E={norm_enco} --grad_D={norm_deco}")"""
-
                 
             total_train_loss+=loss.item()/len(train_loader)
-            #if rank==0:
-            #    print(f"---step={step:<10d} ---step_train_loader={step_train_loader:<10d}")
 
             if rank==0:
                 print(f"---step={step:<10d} ---step_train_loader={step_train_loader:<10d}  ----train ElBO={(loss.item()*cfg.accumulation_steps):.4f}--- LRE = {state.scheduler_enco.get_last_lr()[0]:.6f}-- LRD = {state.scheduler_deco.get_last_lr()[0]:.6f} ")
@@ -306,14 +277,6 @@ if __name__ == "__main__":
                 #Réinitialisation des gradients
                 state.optim_enco.zero_grad()
                 state.optim_deco.zero_grad()
-            
-            
-
-            #if step_train_loader==10:
-            #    break
-
-            #if rank==0:
-            #    print(f"-- arrived after  break---step_train_loader={step_train_loader:<10d}")
             
             
 
@@ -363,14 +326,14 @@ if __name__ == "__main__":
                 state.model_enco.eval()
                 state.model_deco.eval()
 
-                x=batch[0] #shape (Batch,T,N,1)
-                u=batch[1]  #shape (Batch,T,N,1)
+                x=batch[0] 
+                u=batch[1]  
                 x=x.to(device)
                 u=u.to(device)
                 target=u
                 
 
-                batch_size_test,time_step,space_step,_=x.shape #u.shape
+                batch_size_test,time_step,space_step,_=x.shape 
                 x=rearrange(x, "b T N d -> (b T) N d")
                 u=rearrange(u, "b T N d -> (b T) N d")
                 sample,means,log_var_square,_=state.model_enco(x,u)
@@ -394,6 +357,6 @@ if __name__ == "__main__":
 
                     save_checkpoint_encoDeco(state,tmp_path,last_path ) # We save the last DiT_model
                     
-        #assert False
+        
                 
     print("End optimization")

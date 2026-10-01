@@ -50,16 +50,16 @@ import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel
 from torch.utils.data.distributed import DistributedSampler
 
-from DiT.DiT import DiT     #Simu1D
-from utilis.utilis import State,save_checkpoint_encoDeco,load_checkpoint_encoDeco #Simu1D
-from utilis.utilis import State_DiT,save_checkpoint_DiT,load_checkpoint_DiT,cycle,compute_gradient_norm #Simu1D
+from DiT.DiT import DiT     
+from utilis.utilis import State,save_checkpoint_encoDeco,load_checkpoint_encoDeco 
+from utilis.utilis import State_DiT,save_checkpoint_DiT,load_checkpoint_DiT,cycle,compute_gradient_norm 
 
 from config.paser import add_args,add_args_rewards
 from config.preprocess import  Dataset_Burgers 
-from encoder_decoder.enco_deco import Encoder,Decoder  #in Simu 1D
+from encoder_decoder.enco_deco import Encoder,Decoder  
 
-from rewards.rewards import PhysicsRewardSignal                                    #Simu1D
-from metrics.metrics import PhysicalPatternsBurgers                  #Simu1D
+from rewards.rewards import PhysicsRewardSignal                                   
+from metrics.metrics import PhysicalPatternsBurgers                  
 
 
 
@@ -73,9 +73,7 @@ if __name__ == "__main__":
                                     rank=idr_torch.rank)
     
     # bind one GPU per process
-    """ 
-        The following + "device = torch.device("cuda")" is equiv to "device = torch.device(f"cuda:{idr_torch.local_rank}"
-    """
+    
     torch.cuda.set_device(idr_torch.local_rank) 
 
     rank=idr_torch.rank
@@ -95,10 +93,6 @@ if __name__ == "__main__":
     cfg.out_dim=cfg.u_dim
     max_norm=0.1
 
-    #cfg.accumulation_steps = cfg.global_batch_size // cfg.mini_batch_size
-
-    # Paramètres HPC optimisés
-    #scaler = GradScaler() #Réduit la mémoire par 2 à 4× et Accélère le calcul sur A100
     torch.backends.cudnn.benchmark = True  # optimise les convolutions
 
     #device
@@ -110,7 +104,6 @@ if __name__ == "__main__":
         else:
             device = torch.device("cpu")
     except Exception as e:
-        # Fallback to CPU if device selection fails
         print(f"Warning: Device selection failed ({e}), using CPU")
         device = torch.device("cpu")
 
@@ -149,7 +142,7 @@ if __name__ == "__main__":
     #-------------------------------------------------------------------------------------
 
     # For checkpoint Enco-Deco
-    save_dir=parent_dir/"checkpoints" # We suppose that this flder exists
+    save_dir=parent_dir/"checkpoints" 
 
     checkpoint_dir=Path(save_dir)
     enco_deco_path= checkpoint_dir/"checkpointED.pt"
@@ -209,14 +202,14 @@ if __name__ == "__main__":
     deco.to(device)
 
     state_enco_deco=State(enco,deco,optim_enco=None,optim_deco=None,scheduler_enco=None,scheduler_deco=None)
-    state_enco_deco=load_checkpoint_encoDeco(state_enco_deco, enco_deco_path, device,mode="eval")  #on recommence depui s l e modele sauvegarde
+    state_enco_deco=load_checkpoint_encoDeco(state_enco_deco, enco_deco_path, device,mode="eval")  
     print("-------------------telechargemnt model enco-deco reussi----------")
 
     state_DiT=State_DiT(process_DiT,optim=None,scheduler=None) #best_valid_loss=np.inf and epoch_init=0
     state_DiT=load_checkpoint_DiT(state_DiT, DiT_path, device,mode="eval")
     print("-------------------telechargemnt model DiTreussi----------")
 
-    # PHYSICAL Pattern
+    
     physics_pattern=PhysicalPatternsBurgers(cfg.dx) 
     
     #.REwards
@@ -236,23 +229,21 @@ if __name__ == "__main__":
     cosine_scheduler = CosineAnnealingLR(optimizer, T_max=cfg.max_iterations, eta_min=1e-6)
     
     epoch_init=0
-    state=State_DiT(rewards,optimizer,cosine_scheduler) #best_valid_loss=np.inf and epoch_init=0
+    state=State_DiT(rewards,optimizer,cosine_scheduler) 
 
 
     if last_path.exists() and last_path.is_file():
         
-        state=load_checkpoint_DiT(state, last_path, device) #on recommence depui s l e modele sauvegarde
-        #--------------- some changes --------------------------------
-        #state.optimizer= torch.optim.Adam(state.model.parameters() ,lr=cfg.learning_rate  )
-        #state.scheduler=CosineAnnealingLR(state.optimizer, T_max=cfg.max_iterations, eta_min=1e-5)
+        state=load_checkpoint_DiT(state, last_path, device) 
+        
         state.best_valid_loss=np.inf
         #-------------------------------------
 
-        #print(state)
+        
         print(f"-------------------telechargemnt rewardsreussi, epoch={state.epoch}----------------------")
 
     # _____________LOAD losses-------------------------------
-    if  train_losses_path.exists() and train_losses_path.is_file(): #It is enough to consider just one
+    if  train_losses_path.exists() and train_losses_path.is_file(): 
         
         train_losses=np.load(train_losses_path) #
         test_losses=np.load(test_losses_path)
@@ -276,8 +267,8 @@ if __name__ == "__main__":
         trueScoreList=[]
 
 
-    # cfg.num_refinement_steps =3
-    min_noise_std = cfg.min_noise_std  # 2e-6
+   
+    min_noise_std = cfg.min_noise_std  
     betas = [
         min_noise_std ** (k / cfg.num_refinement_steps)
         for k in reversed(range(cfg.num_refinement_steps + 1))
@@ -291,7 +282,7 @@ if __name__ == "__main__":
     )
     time_multiplier = 1000 / cfg.num_refinement_steps
     #--------------------------------DDp---------------------------------------------------
-    #if False:
+    
     # duplicate the model
     state_enco_deco.model_enco = DistributedDataParallel(state_enco_deco.model_enco, device_ids=[idr_torch.local_rank])
     state_enco_deco.model_deco = DistributedDataParallel(state_enco_deco.model_deco, device_ids=[idr_torch.local_rank])
@@ -324,44 +315,44 @@ if __name__ == "__main__":
 
             state.model.train()
 
-            x=batch[0] #shape (Batch,T,N,1)
-            u=batch[1]  #shape (Batch,T,N,1)
+            x=batch[0] 
+            u=batch[1]  
             x=x.to(device)
             u=u.to(device)
             target=u
 
-            batch_size_tr,time_step,space_step,u_dim=u.shape #u.shape
+            batch_size_tr,time_step,space_step,u_dim=u.shape 
             if step<=5:
                 pertu=np.random.choice(cfg.pertu_deviation_set, size=cfg.num_sample, replace=False)
             elif step>5:
                 pertu=np.random.choice(cfg.pertu_deviation_set, size=cfg.num_sample, replace=True)
-            if step > 50: #100
+            if step > 50: 
                 pertu=np.random.choice(cfg.pertu_deviation_set2, size=cfg.num_sample, replace=True)
 
             if rank==0:
                 print(f"-------pertu_deviation {pertu}")
 
             pertu=torch.tensor(pertu,dtype=u.dtype,device=device)
-            pertubation=pertu.reshape(-1,1,1,1)*torch.randn(cfg.num_sample,batch_size_tr,space_step,u_dim,device=device ) #shape (E, b, Nx,Nz, d)
+            pertubation=pertu.reshape(-1,1,1,1)*torch.randn(cfg.num_sample,batch_size_tr,space_step,u_dim,device=device ) 
 
             u=u[:,0,...].unsqueeze(0)+ pertubation
             
-            x_out=x.expand(cfg.num_sample,batch_size_tr,time_step,space_step,cfg.x_dim)  #shape (E,B,Dx,Dz,u_dim)
+            x_out=x.expand(cfg.num_sample,batch_size_tr,time_step,space_step,cfg.x_dim)  
             x_out=x_out[:,:,1:,...]
-            x_in=x[0,0].expand(cfg.num_sample,batch_size_tr,space_step,cfg.x_dim)  #shape (E,B,Dx,Dz,u_dim)
+            x_in=x[0,0].expand(cfg.num_sample,batch_size_tr,space_step,cfg.x_dim)  
 
             x_in=rearrange(x_in, "E b N d -> (E b) N d")
             u=rearrange(u, "E b N d -> (E b) N d")
 
             with torch.no_grad():
                 
-                sample,_,_,_=state_enco_deco.model_enco(x_in,u) #shape ((E batch),M,h)
+                sample,_,_,_=state_enco_deco.model_enco(x_in,u) 
 
                 y=[]  
-                sample_prev=sample  #sample_prev shape (Eb,N,d)
+                sample_prev=sample  
                 
                 for t in range(time_step - 1 ):
-                    y_noised = torch.randn_like(sample_prev)  # , dtype=sample_cur.dtype, device=sample_cur.device
+                    y_noised = torch.randn_like(sample_prev)  
 
                     for k in ddpm_scheduler.timesteps:
                         timess = (
@@ -373,35 +364,35 @@ if __name__ == "__main__":
                         pred = state_DiT.model(
                             torch.cat([sample_prev, y_noised], dim=1), timess * time_multiplier
                         )
-                        y_noised = ddpm_scheduler.step(pred, k, y_noised).prev_sample # shape (Eb,M,h)
+                        y_noised = ddpm_scheduler.step(pred, k, y_noised).prev_sample 
                     sample_prev= y_noised
                     y.append( y_noised.unsqueeze(1)) 
 
-                y=torch.cat(y,dim=1)  # # shape (Eb,T-1,M,h)
+                y=torch.cat(y,dim=1)  
                     
-                y=rearrange(y, "b T M h -> (b T) M h") # shape ((Eb T-1),M,h)
+                y=rearrange(y, "b T M h -> (b T) M h") 
 
                 
                 x_out=rearrange(x_out,"E b T N d -> (E b T) N d ")
-                out=state_enco_deco.model_deco(y,x_out) # shape (Eb(T-1),N ,d)
+                out=state_enco_deco.model_deco(y,x_out) 
 
-            out=rearrange(out, "(E b T) N h ->E b T N h",E=cfg.num_sample,b=batch_size_tr) # shape (E, b, (T-1),N,d)
+            out=rearrange(out, "(E b T) N h ->E b T N h",E=cfg.num_sample,b=batch_size_tr) 
 
             # Add ititial cond
             out=torch.cat( (target[:,0:1,...].expand(cfg.num_sample,batch_size_tr,1,space_step,u_dim),out), dim=2 )
 
             winner,loser=physics_pattern.winLos(out,target.unsqueeze(0),cfg.mass_weight,cfg.energy_weight,
-                                                cfg.grad_weight,cfg.boundary_weight) # shape ( b, T,Dx,Dz,d)
+                                                cfg.grad_weight,cfg.boundary_weight) 
             
             winnerIndx,loserIndx=physics_pattern.winLosIndx(out,target.unsqueeze(0),cfg.mass_weight,cfg.energy_weight,
-                                                cfg.grad_weight,cfg.boundary_weight) # shape ( b, T,Dx,Dz,d) 
+                                                cfg.grad_weight,cfg.boundary_weight) 
             print(f" rank={rank} winner indexes={winnerIndx.tolist()} loser indexes={loserIndx.tolist()}")
 
-            winner=winner.to(out.dtype)                               #torch.bfloat16
+            winner=winner.to(out.dtype)                               
             loser=loser.to(out.dtype)
             
             with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
-                winner_score=state.model(x,winner) #(b )
+                winner_score=state.model(x,winner) 
 
                 loser_score=state.model(x,loser)
                 assert winner_score.shape == loser_score.shape, f"{winner_score.shape} vs {loser_score.shape}"
@@ -428,15 +419,7 @@ if __name__ == "__main__":
                 if rank==0:
                     print(f"Update gradient {num_grad_update} time")
 
-                """#--------------------------------- check where grad explod -----------------------------------------------------    
-                 Juste avant le clip, logger plus d'infos
-                for name, p in state.model.named_parameters():
-                    if p.grad is not None:
-                        g = p.grad.norm().item()
-                        if g > 10:  # seuil d'alerte
-                            print(f"LARGE GRAD: {name} = {g:.2f}")
-                            assert False
-                # -----------------------------------------------------------------------------------------------------------------"""
+                
                 #-------------------------------------------------- whether grad explod ---------------------------------------------------------------
                 grad_norm = clip_grad_norm_(state.model.parameters(), max_norm=max_norm)
                 grad_norm = grad_norm/ idr_torch.size
@@ -462,15 +445,12 @@ if __name__ == "__main__":
                 #Réinitialisation des gradients
                 state.optim.zero_grad()
 
-            #if step_train_loader==50:
-            #    break
-
-        ## Step the scheduler
+            
         state.scheduler.step()
 
         #-------checkpoint--------------------------------------------------
         loss_tensor = torch.tensor(total_train_loss, device=device)/ idr_torch.size
-        #dist.broadcast(loss_tensor, src=0)  
+        
         dist.all_reduce(loss_tensor, op=dist.ReduceOp.SUM)
         
         if loss_tensor.item() < state.best_valid_loss:
@@ -484,14 +464,14 @@ if __name__ == "__main__":
 
         else:
             counter += 1
-            # Convert stop decision to a tensor and broadcast from rank 0
+            
             should_stop = torch.tensor(1 if counter >= patience else 0, device=device)
-            dist.broadcast(should_stop, src=0)  # rank 0 decision propagates to all
+            dist.broadcast(should_stop, src=0) 
 
             if should_stop.item():
                 if rank == 0:
                     print("Early stopping déclenché !")
-                break  # now ALL ranks break together
+                break  
 
         
         #------------------- Eval --------------
@@ -507,34 +487,34 @@ if __name__ == "__main__":
                 
                 state.model.eval()
 
-                x=batch[0] #shape (Batch,T,N,1)
-                u=batch[1]  #shape (Batch,T,N,1)
+                x=batch[0] 
+                u=batch[1]  
                 x=x.to(device)
                 u=u.to(device)
                 target=u
 
-                batch_size_test,time_step,space_step,u_dim=u.shape #u.shape
+                batch_size_test,time_step,space_step,u_dim=u.shape 
                 
                 pertu=np.random.choice(cfg.pertu_deviation_set, size=cfg.num_sample, replace=False)
                 pertu=torch.tensor(pertu,dtype=u.dtype,device=device)
-                pertubation=pertu.reshape(-1,1,1,1)*torch.randn(cfg.num_sample,batch_size_test,space_step,u_dim,device=device ) #shape (E, b, N, d)
+                pertubation=pertu.reshape(-1,1,1,1)*torch.randn(cfg.num_sample,batch_size_test,space_step,u_dim,device=device ) 
                 u=u[:,0,...].unsqueeze(0)+ pertubation
                 
-                x_out=x.expand(cfg.num_sample,batch_size_test,time_step,space_step,cfg.x_dim)  #shape (E,B,D,u_dim)
+                x_out=x.expand(cfg.num_sample,batch_size_test,time_step,space_step,cfg.x_dim) 
                 x_out=x_out[:,:,1:,...]
-                x_in=x[0,0].expand(cfg.num_sample,batch_size_test,space_step,cfg.x_dim)  #shape (E,B,D,u_dim)
+                x_in=x[0,0].expand(cfg.num_sample,batch_size_test,space_step,cfg.x_dim)  
 
                 x_in=rearrange(x_in, "E b N d -> (E b) N d")
                 u=rearrange(u, "E b N d -> (E b) N d")
 
-                sample,_,_,_=state_enco_deco.model_enco(x_in,u) #shape ((E batch,T),M,h)
+                sample,_,_,_=state_enco_deco.model_enco(x_in,u) 
 
                 y=[]  
-                sample_prev=sample  #sample_prev shape (Eb,N,d)
+                sample_prev=sample 
                 
                 for t in range(time_step - 1 ):
-                    #sample_cur=sammple_amenaged[:,t+1,:,:] #sample_cur
-                    y_noised = torch.randn_like(sample_prev)  # , dtype=sample_cur.dtype, device=sample_cur.device
+                    
+                    y_noised = torch.randn_like(sample_prev)  
 
                     for k in ddpm_scheduler.timesteps:
                         timess = (
@@ -546,35 +526,35 @@ if __name__ == "__main__":
                         pred = state_DiT.model(
                             torch.cat([sample_prev, y_noised], dim=1), timess * time_multiplier
                         )
-                        y_noised = ddpm_scheduler.step(pred, k, y_noised).prev_sample # shape (Eb,M,h)
+                        y_noised = ddpm_scheduler.step(pred, k, y_noised).prev_sample 
                     sample_prev= y_noised
                     y.append( y_noised.unsqueeze(1)) 
 
-                y=torch.cat(y,dim=1)  # # shape (Eb,T-1,M,h)
+                y=torch.cat(y,dim=1)  
                     
-                y=rearrange(y, "b T M h -> (b T) M h") # shape ((Eb T-1),M,h)
+                y=rearrange(y, "b T M h -> (b T) M h") 
 
                 
                 x_out=rearrange(x_out,"E b T N d -> (E b T) N d ")
-                out=state_enco_deco.model_deco(y,x_out) # shape (Eb(T-1),Dx,Dz ,d)
+                out=state_enco_deco.model_deco(y,x_out) 
 
-                out=rearrange(out, "(E b T) N h ->E b T N h",E=cfg.num_sample,b=batch_size_test) # shape (E, b, (T-1),N,d)
+                out=rearrange(out, "(E b T) N h ->E b T N h",E=cfg.num_sample,b=batch_size_test) 
                 # Add ititial cond
                 out=torch.cat( (target[:,0:1,...].expand(cfg.num_sample,batch_size_test,1,space_step,u_dim),out), dim=2 )
 
                 winner,loser=physics_pattern.winLos(out,target.unsqueeze(0),cfg.mass_weight,cfg.energy_weight,
-                                                cfg.grad_weight,cfg.boundary_weight) # shape ( b, T,Dx,Dz,d)
+                                                cfg.grad_weight,cfg.boundary_weight) 
                 
-                winner=winner.to(out.dtype)                               #torch.bfloat16
+                winner=winner.to(out.dtype)                               
                 loser=loser.to(out.dtype)
                 with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
-                    winner_score=state.model(x,winner) #(b)
+                    winner_score=state.model(x,winner)
                     loser_score=state.model(x,loser)
                     true_score=state.model(x,target)
                     lossTest=-F.logsigmoid(winner_score - loser_score)
                     lossTest=lossTest.mean()
 
-                dist.all_reduce(lossTest, op=dist.ReduceOp.SUM)        # DDP Sum reduction
+                dist.all_reduce(lossTest, op=dist.ReduceOp.SUM)       
                 test_losses.append(lossTest.item()/idr_torch.size)
                 winnerScoreList.append(winner_score.tolist()[0])
                 loserScoreList.append(loser_score.tolist()[0])
@@ -582,7 +562,7 @@ if __name__ == "__main__":
 
             t4=time.time()
 
-                # ----------- Sauvegarde Loosses (On peut de passer de ca)
+               
                 
             state.epoch=step
             if rank==0:
@@ -595,7 +575,6 @@ if __name__ == "__main__":
                 np.save(loserScorePath,np.array(loserScoreList))
                 np.save(trueScorePath,np.array(trueScoreList))
 
-        #dist.barrier() 
-        #assert False
+       
     print("End optimization")
     
